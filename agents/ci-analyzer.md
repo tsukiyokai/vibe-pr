@@ -24,7 +24,7 @@ You will receive a prompt containing:
 - `repo`: repository (e.g. "cann/hcomm")
 - `pr`: PR number
 - `repo_root`: local path to the repository checkout
-- `failed_tasks`: (optional) pre-fetched CI results from ci_log_fetcher.py
+- `failed_tasks`: list of failed CI task objects, each with `name`, `status`, `log_url`, `comment_id`
 
 ## Workflow
 
@@ -38,16 +38,18 @@ python3 scripts/ci_log_fetcher.py --repo {repo} --pr {pr} --source auto
 ### Step 2: Analyze Each Failed Task
 
 #### Compile Errors
-1. Extract file path, line number, and error message from log_snippet.
-2. Read the source file.
-3. Understand the error (missing include, type mismatch, syntax error, etc.).
-4. Fix using Edit tool.
-5. If the error references a header or type from another file, Grep for it.
-6. Mark as `auto_fixed`.
+1. If `log_url` is available, fetch log content via `curl -sL {log_url}` in Bash.
+2. Extract file path, line number, and error message from the log output.
+3. Read the source file.
+4. Understand the error (missing include, type mismatch, syntax error, etc.).
+5. Fix using Edit tool.
+6. If the error references a header or type from another file, Grep for it.
+7. Mark as `auto_fixed`.
 
 #### Static Check (codecheck / codecheck_inc)
-1. Extract rule ID and file location from log_snippet.
-2. Load references/codecheck-rules.md for rule explanation.
+1. If `log_url` is available, fetch log content via `curl -sL {log_url}` in Bash.
+2. Extract rule ID and file location from the log output.
+3. Load references/codecheck-rules.md for rule explanation.
 3. Apply the fix.
 4. Mark as `auto_fixed`.
 

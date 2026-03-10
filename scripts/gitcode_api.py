@@ -47,6 +47,8 @@ def get_token():
 def get_username():
     """从 ~/.git-credentials 读取 gitcode.com 的用户名。"""
     cred_path = Path.home() / ".git-credentials"
+    if not cred_path.exists():
+        raise GitCodeError("~/.git-credentials 不存在")
     text = cred_path.read_text()
     match = re.search(r"https://([^:]+):[^@]+@gitcode\.com", text)
     if not match:
@@ -66,7 +68,10 @@ def _request(method, url, token, data=None):
 
     try:
         with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            body = resp.read().decode("utf-8")
+            if not body:
+                return None
+            return json.loads(body)
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace")
         hints = {
@@ -112,6 +117,8 @@ def api_get_paginated(path, token, params=None, max_pages=10):
         results = api_get(path, token, params)
         if not results:
             break
+        if not isinstance(results, list):
+            return [results] if not all_results else all_results
         all_results.extend(results)
         if len(results) < params["per_page"]:
             break

@@ -22,15 +22,17 @@ from pr_status import parse_bot_welcome
 
 
 def parse_datetime(dt_str):
-    """解析 GitCode API 返回的时间字符串。"""
+    """解析 GitCode API 返回的时间字符串，始终返回 timezone-aware datetime。"""
     # 格式如 "2025-01-15T10:30:00+08:00" 或 "2025-01-15T02:30:00Z"
     dt_str = dt_str.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(dt_str)
+        dt = datetime.fromisoformat(dt_str)
     except ValueError:
-        # 回退：去掉时区信息
         clean = re.sub(r"[+-]\d{2}:\d{2}$", "", dt_str)
-        return datetime.strptime(clean, "%Y-%m-%dT%H:%M:%S")
+        dt = datetime.strptime(clean, "%Y-%m-%dT%H:%M:%S")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def get_candidates_from_pr(repo, token, pr_number):

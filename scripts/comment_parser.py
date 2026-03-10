@@ -10,7 +10,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from gitcode_api import get_token, get_pull, get_pull_comments, api_get, GitCodeError
 
@@ -73,10 +73,11 @@ def classify_comment(comment, pr_author):
         return "author_reply"
 
     # reviewer 的评论——区分建议和提问
-    if _is_suggestion(body):
-        return "review_suggestion"
+    # 先检查 question，避免含代码引用的提问被 suggestion 的 ``` 模式抢走
     if _is_question(body):
         return "review_question"
+    if _is_suggestion(body):
+        return "review_suggestion"
 
     # 默认：reviewer 的一般评论，按 suggestion 处理（宁多勿漏）
     return "review_suggestion"
@@ -111,7 +112,7 @@ def _is_suggestion(body):
 def _is_question(body):
     """判断是否是提问或设计质疑。"""
     indicators = [
-        r"\?",  # 包含问号
+        r"[?\uff1f]",  # 半角问号 ? 和全角问号 ？
         r"(?:为什么|why|how come|what if|是否|能否|有没有|wouldn't|shouldn't|isn't)",
         r"(?:这里为啥|这样做的原因|为何不|why not)",
     ]
@@ -122,15 +123,18 @@ def _is_question(body):
 
 
 def parse_datetime(dt_str):
-    """解析时间字符串。"""
+    """解析时间字符串，始终返回 timezone-aware datetime。"""
     if not dt_str:
         return None
     dt_str = dt_str.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(dt_str)
+        dt = datetime.fromisoformat(dt_str)
     except ValueError:
         clean = re.sub(r"[+-]\d{2}:\d{2}$", "", dt_str)
-        return datetime.strptime(clean, "%Y-%m-%dT%H:%M:%S")
+        dt = datetime.strptime(clean, "%Y-%m-%dT%H:%M:%S")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def get_latest_commit_time(repo, token, pr_number):
@@ -209,6 +213,8 @@ def parse_pr_comments(repo, pr_number, since_commit=False):
             "type": ctype,
             "author": c.get("user", {}).get("login", ""),
             "body": c.get("body", ""),
+            "file": c.get("path", ""),
+            "line": c.get("line"),
             "created_at": c.get("created_at", ""),
             "after_latest_push": after_latest_push,
         })

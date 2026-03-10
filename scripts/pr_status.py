@@ -25,9 +25,9 @@ def parse_bot_welcome(comments):
     """
     modules = []
 
-    for c in comments:
+    # 从后往前遍历，取最新的 bot 欢迎评论（PR 多次变更后 bot 会重新发表格）
+    for c in reversed(comments):
         body = c.get("body", "")
-        # bot 欢迎评论包含审批表格
         if "| module |" not in body.lower() and "| module" not in body:
             continue
 
@@ -39,8 +39,8 @@ def parse_bot_welcome(comments):
             line = line.strip()
             if not line.startswith("|"):
                 continue
-            cells = [c.strip() for c in line.split("|")]
-            cells = [c for c in cells if c]  # 去掉空串
+            cells = [cell.strip() for cell in line.split("|")]
+            cells = [cell for cell in cells if cell]
 
             if len(cells) < 3:
                 continue
@@ -60,7 +60,7 @@ def parse_bot_welcome(comments):
             })
 
         if modules:
-            break  # 只取最新的 bot 欢迎评论
+            break  # 取最新的即可
 
     return modules
 

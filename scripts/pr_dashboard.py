@@ -159,8 +159,16 @@ def main():
     if args.prs:
         pr_list = []
         for spec in args.prs:
+            if ":" not in spec:
+                print(f"错误：'{spec}' 格式不正确，应为 REPO:PR（如 cann/hcomm:584）",
+                      file=sys.stderr)
+                sys.exit(1)
             repo, num = spec.rsplit(":", 1)
-            pr_list.append((repo, int(num)))
+            try:
+                pr_list.append((repo, int(num)))
+            except ValueError:
+                print(f"错误：'{num}' 不是有效的 PR 编号", file=sys.stderr)
+                sys.exit(1)
     elif args.active:
         pr_list = discover_active_prs()
     else:

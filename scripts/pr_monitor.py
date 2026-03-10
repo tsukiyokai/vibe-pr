@@ -131,12 +131,13 @@ def generate_review_task(comments, repo, pr, work_dir):
 def generate_ci_task(repo, pr, work_dir):
     """Generate a structured task for the ci-analyzer agent."""
     ci_results = ci_log_fetcher.fetch(repo, pr, source="auto")
+    failed = [t for t in ci_results.get("tasks", []) if t["status"] == "fail"]
     return {
         "agent": "ci-analyzer",
         "repo": repo,
         "pr": pr,
         "repo_root": work_dir,
-        "failed_tasks": ci_results,
+        "failed_tasks": failed,
     }
 
 
@@ -191,8 +192,9 @@ def get_new_comments(repo, pr, state, human_only, extra_bots):
         cid = c.get("id")
         if cid is not None and cid in processed:
             continue
-        if human_only and extra_bots:
-            if c["author"].lower() in {b.lower() for b in extra_bots}:
+        if human_only:
+            # comment_parser already filters BOT_ACCOUNTS, but extra_bots need manual filter
+            if extra_bots and c["author"].lower() in {b.lower() for b in extra_bots}:
                 continue
 
         # Skip comments already handled in review_tracker
@@ -293,14 +295,19 @@ def main():
         # 处理 review_suggestion
         if suggestions:
             log(f"Found {len(suggestions)} suggestions")
-            for s in suggestions:
+            # Agent handles max 10 per batch; only mark dispatched ones as processed
+            batch = suggestions[:10]
+            overflow = suggestions[10:]
+            for s in batch:
                 preview = s["body"][:120].replace("\n", " ")
                 log(f"  - {s['author']}: {preview}")
+            if overflow:
+                log(f"  ({len(overflow)} more deferred to next round)")
 
-            task = generate_review_task(suggestions, args.repo, args.pr, work_dir)
+            task = generate_review_task(batch, args.repo, args.pr, work_dir)
             print(json.dumps(task, ensure_ascii=False, indent=2), flush=True)
 
-            mark_processed(state, suggestions)
+            mark_processed(state, batch)
             state["fix_rounds"] += 1
             log(f"Round {state['fix_rounds']}/{args.max_rounds} task generated")
         else:

@@ -147,7 +147,7 @@ python3 ~/.claude/skills/vibe-pr/scripts/pr_status.py --repo cann/hcomm --pr <nu
 - `lgtm` — 代码审查
 - `approved` — 合并授权
 
-长时间无人 review：先检查 PR 大小和描述质量，考虑 SIG 例会（双周五 14:00）提一嘴，或邮件列表 hccl@cann.osinfra.cn 发简短说明。
+长时间无人 review：先检查 PR 大小和描述质量，考虑 SIG 例会（单周周五 14:00）提一嘴，或邮件列表 hccl@cann.osinfra.cn 发简短说明。
 
 ---
 

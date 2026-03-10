@@ -29,7 +29,7 @@ CI_TASKS = {
 CI_TABLE_ROW = re.compile(
     r"<td><strong>(.+?)</strong></td>\s*"
     r"<td>\s*(?:✅|❌|⚠️|🔴|🟢)?\s*(SUCCESS|FAILED|RUNNING|ERROR|TIMEOUT|ABORTED)\s*</td>"
-    r"(?:\s*<td><a\s+href=([^>]*)>.*?</a></td>)?",
+    r'(?:\s*<td><a\s+href="?([^">\s]*)"?>.*?</a></td>)?',
     re.IGNORECASE | re.DOTALL,
 )
 

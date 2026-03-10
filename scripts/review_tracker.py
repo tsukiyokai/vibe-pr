@@ -40,15 +40,20 @@ def _save(repo: str, pr: int, data: dict) -> None:
     tmp.rename(path)
 
 
-def sync(repo: str, pr: int) -> dict:
-    """Sync PR comments into tracker. Returns updated tracker."""
-    # Add scripts/ to path so we can import comment_parser
-    scripts_dir = str(Path(__file__).parent)
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
-    import comment_parser
+def sync(repo: str, pr: int, parsed_data: dict = None) -> dict:
+    """Sync PR comments into tracker. Returns updated tracker.
 
-    parsed = comment_parser.parse_pr_comments(repo, pr, since_commit=False)
+    Args:
+        parsed_data: Pre-parsed comment data from comment_parser.parse_pr_comments().
+                     If None, fetches from API (causes an extra API call).
+    """
+    if parsed_data is None:
+        scripts_dir = str(Path(__file__).parent)
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import comment_parser
+        parsed_data = comment_parser.parse_pr_comments(repo, pr, since_commit=False)
+
     tracker = _load(repo, pr)
 
     existing_ids = {c["id"] for c in tracker["comments"]}
@@ -56,7 +61,7 @@ def sync(repo: str, pr: int) -> dict:
     # Only track review_suggestion and review_question types
     review_types = {"review_suggestion", "review_question"}
 
-    for c in parsed.get("review_comments", []):
+    for c in parsed_data.get("review_comments", []):
         if c["type"] not in review_types:
             continue
         if c["id"] in existing_ids:
@@ -80,28 +85,33 @@ def sync(repo: str, pr: int) -> dict:
 
 
 def update_comment(repo: str, pr: int, comment_id: int,
-                   status: str, summary: str = "") -> dict:
-    """Update status of a specific comment. Returns updated tracker."""
+                   status: str, summary: str = "") -> bool:
+    """Update status of a specific comment. Returns True if found."""
     tracker = _load(repo, pr)
     for c in tracker["comments"]:
         if c["id"] == comment_id:
             c["status"] = status
             c["fix_summary"] = summary
             c["updated_at"] = datetime.now().isoformat()
-            break
-    _save(repo, pr, tracker)
-    return tracker
+            _save(repo, pr, tracker)
+            return True
+    print(f"Warning: comment {comment_id} not found in tracker for {repo} !{pr}",
+          file=sys.stderr)
+    return False
 
 
-def mark_replied(repo: str, pr: int, comment_id: int) -> None:
-    """Mark a comment as having its reply sent."""
+def mark_replied(repo: str, pr: int, comment_id: int) -> bool:
+    """Mark a comment as having its reply sent. Returns True if found."""
     tracker = _load(repo, pr)
     for c in tracker["comments"]:
         if c["id"] == comment_id:
             c["reply_sent"] = True
             c["updated_at"] = datetime.now().isoformat()
-            break
-    _save(repo, pr, tracker)
+            _save(repo, pr, tracker)
+            return True
+    print(f"Warning: comment {comment_id} not found in tracker for {repo} !{pr}",
+          file=sys.stderr)
+    return False
 
 
 def get_pending(repo: str, pr: int) -> list:
@@ -150,8 +160,12 @@ def main():
     elif args.update:
         if not args.status:
             parser.error("--update requires --status")
-        update_comment(args.repo, args.pr, args.update, args.status, args.fix_summary)
-        print(f"Updated comment {args.update} -> {args.status}")
+        found = update_comment(args.repo, args.pr, args.update, args.status, args.fix_summary)
+        if found:
+            print(f"Updated comment {args.update} -> {args.status}")
+        else:
+            print(f"Comment {args.update} not found", file=sys.stderr)
+            sys.exit(1)
     elif args.pending:
         pending = get_pending(args.repo, args.pr)
         print(json.dumps(pending, indent=2, ensure_ascii=False))

@@ -183,8 +183,8 @@ def get_new_comments(repo, pr, state, human_only, extra_bots):
     data = parse_pr_comments(repo, pr, since_commit=True)
     processed = set(state["processed_ids"])
 
-    # Sync all comments to review tracker
-    review_tracker.sync(repo, pr)
+    # Sync to review tracker, reusing already-fetched data to avoid duplicate API call
+    review_tracker.sync(repo, pr, parsed_data=data)
 
     suggestions, questions = [], []
     for c in data["review_comments"]:

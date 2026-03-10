@@ -93,9 +93,12 @@ def _infer_next_action(status: dict, review_sum: dict = None) -> str:
     # CI passed, check review
     lgtm = status.get("lgtm", {})
     approve = status.get("approve", {})
-    if lgtm.get("got", 0) < lgtm.get("need", 1):
+    lgtm_need = lgtm.get("need", 0)
+    approve_need = approve.get("need", 0)
+    # When modules is empty, need=0; treat as unknown → still need reviewer
+    if lgtm_need == 0 or lgtm.get("got", 0) < lgtm_need:
         return "find reviewer"
-    if approve.get("got", 0) < approve.get("need", 1):
+    if approve_need == 0 or approve.get("got", 0) < approve_need:
         return "get approve"
 
     if review_sum and review_sum.get("pending", 0) > 0:

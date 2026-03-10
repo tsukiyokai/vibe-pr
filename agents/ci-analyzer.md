@@ -24,7 +24,10 @@ You will receive a prompt containing:
 - `repo`: repository (e.g. "cann/hcomm")
 - `pr`: PR number
 - `repo_root`: local path to the repository checkout
-- `failed_tasks`: list of failed CI task objects, each with `name`, `status`, `log_url`, `comment_id`
+- `failed_tasks`: list of failed CI task objects, each with:
+  - `name`, `status`, `log_url`, `comment_id`
+  - (API mode) `log`: full log text, `job_id`, `job_status`
+  - (API error) `api_error`: error message if API call failed
 
 ## Workflow
 
@@ -35,13 +38,20 @@ If `failed_tasks` not provided:
 python3 scripts/ci_log_fetcher.py --repo {repo} --pr {pr} --source auto
 ```
 
+If `CODEARTS_DOMAIN_ID` env is set, `--source auto` will try the CodeArts API first
+and include actual log content in the `log` field of failed tasks.
+
 ### Step 2: Analyze Each Failed Task
 
+#### Log Sources (priority order)
+
+1. If `log` field present in task: use it directly (from CodeArts API)
+2. Otherwise: search PR comments for error details via `python3 scripts/comment_parser.py --repo {repo} --pr {pr}`
+
 #### Compile Errors
-1. Search PR comments for error details: run `python3 scripts/comment_parser.py --repo {repo} --pr {pr}`
-   and look for cann-robot comments containing compile error messages (file paths, line numbers, error text).
-   Note: `log_url` points to CodeArts Web UI (not downloadable), so extract info from PR comments instead.
-2. Extract file path, line number, and error message from the comment text.
+1. Check if task has `log` field. If yes, search the log for error messages (file:line: error: ...).
+   If no `log` field, search PR comments for cann-robot comments containing compile error messages.
+2. Extract file path, line number, and error message.
 3. Read the source file.
 4. Understand the error (missing include, type mismatch, syntax error, etc.).
 5. Fix using Edit tool.

@@ -95,10 +95,12 @@ def _infer_next_action(status: dict, review_sum: dict = None) -> str:
     approve = status.get("approve", {})
     lgtm_need = lgtm.get("need", 0)
     approve_need = approve.get("need", 0)
-    # When modules is empty, need=0; treat as unknown → still need reviewer
-    if lgtm_need == 0 or lgtm.get("got", 0) < lgtm_need:
+    has_lgtm = lgtm.get("label", False)
+    has_approve = approve.get("label", False)
+    # When modules empty (need=0), use label as fallback; if label present, review passed
+    if not has_lgtm and (lgtm_need == 0 or lgtm.get("got", 0) < lgtm_need):
         return "find reviewer"
-    if approve_need == 0 or approve.get("got", 0) < approve_need:
+    if not has_approve and (approve_need == 0 or approve.get("got", 0) < approve_need):
         return "get approve"
 
     if review_sum and review_sum.get("pending", 0) > 0:

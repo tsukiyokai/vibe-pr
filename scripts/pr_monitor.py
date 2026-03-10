@@ -181,14 +181,18 @@ def trigger_ci(repo, pr):
 
 def get_new_comments(repo, pr, state, human_only, extra_bots):
     """Pull new comments, classify, sync to tracker. Returns (suggestions, questions)."""
-    data = parse_pr_comments(repo, pr, since_commit=True)
+    # Fetch ALL comments (since_commit=False) so tracker gets the full picture
+    data = parse_pr_comments(repo, pr, since_commit=False)
     processed = set(state["processed_ids"])
 
-    # Sync to review tracker, reusing already-fetched data to avoid duplicate API call
+    # Sync all comments to review tracker
     review_tracker.sync(repo, pr, parsed_data=data)
 
     suggestions, questions = [], []
     for c in data["review_comments"]:
+        # Only process comments after latest push
+        if not c.get("after_latest_push", False):
+            continue
         cid = c.get("id")
         if cid is not None and cid in processed:
             continue

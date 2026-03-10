@@ -68,10 +68,10 @@ def _request(method, url, token, data=None):
 
     try:
         with urllib.request.urlopen(req) as resp:
-            body = resp.read().decode("utf-8")
-            if not body:
-                return None
-            return json.loads(body)
+            raw = resp.read().decode("utf-8")
+            if not raw.strip():
+                return {}
+            return json.loads(raw)
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace")
         hints = {

@@ -39,6 +39,8 @@ def infer_phase(status):
         return 5.5, "收到 review 意见"
     if status["ci"] == "passed":
         return 5, "CI 通过，找 Reviewer"
+    if status["ci"] == "failed":
+        return 4, "CI 失败，需修复后重新触发"
     if status["ci"] == "running":
         return 4, "CI 运行中"
     if status["cla"]:
@@ -64,6 +66,8 @@ def build_progress(phase, status):
         lines.append("- [x] 阶段 4：CI 通过")
     elif status["ci"] == "running":
         lines.append("- [ ] 阶段 4：CI 运行中")
+    elif status["ci"] == "failed":
+        lines.append("- [ ] 阶段 4：CI 失败")
     else:
         lines.append("- [ ] 阶段 4：CI 未触发")
 
@@ -95,6 +99,8 @@ def build_todos(phase, status):
         todos.append("- 检查 CLA 签署状态，确认 committer email 正确")
     if status["ci"] == "not_started":
         todos.append("- 在 PR 评论区发送 `compile` 触发 CI")
+    elif status["ci"] == "failed":
+        todos.append("- 用 ci_log_fetcher.py 查看失败原因，修复后重新触发 CI")
     elif status["ci"] == "running":
         todos.append("- 等待 CI 完成，用 pr_status.py 检查结果")
     if phase < 5 and status["ci"] == "passed":

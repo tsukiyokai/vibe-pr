@@ -106,6 +106,8 @@ def get_pr_status(repo, pr_number):
         ci = "passed"
     elif "ci-pipeline-running" in labels:
         ci = "running"
+    elif "ci-pipeline-failed" in labels:
+        ci = "failed"
     else:
         ci = "not_started"
 

@@ -142,25 +142,14 @@ def generate_ci_task(repo, pr, work_dir):
 
 # ── Safety ───────────────────────────────────────────────
 
-consecutive_failures = {}
 
-
-def record_failure(comment_id):
-    consecutive_failures[comment_id] = consecutive_failures.get(comment_id, 0) + 1
-
-
-def should_escalate(comment_id):
-    """Return True if this comment has failed fixes twice."""
-    return consecutive_failures.get(comment_id, 0) >= 2
-
-
-def count_changed_files(work_dir):
-    """Count files changed in working tree."""
-    r = subprocess.run(
-        ["git", "diff", "--name-only"],
-        cwd=work_dir, capture_output=True, text=True,
-    )
-    return len([l for l in r.stdout.strip().split("\n") if l])
+def is_already_handled(repo, pr, comment_id):
+    """Check if a comment is already fixed or escalated in review_tracker."""
+    tracker = review_tracker._load(repo, pr)
+    for c in tracker["comments"]:
+        if c["id"] == comment_id and c["status"] in ("fixed", "needs_user", "rejected"):
+            return True
+    return False
 
 
 # ── Adaptive Interval ────────────────────────────────────
@@ -206,10 +195,8 @@ def get_new_comments(repo, pr, state, human_only, extra_bots):
             if c["author"].lower() in {b.lower() for b in extra_bots}:
                 continue
 
-        # Skip comments that have already failed twice
-        if should_escalate(cid):
-            review_tracker.update_comment(repo, pr, cid, "needs_user",
-                                          "Auto-fix failed twice, escalated")
+        # Skip comments already handled in review_tracker
+        if is_already_handled(repo, pr, cid):
             continue
 
         if c["type"] == "review_suggestion":
@@ -335,7 +322,8 @@ def main():
                 if data.get("review_comments"):
                     last = data["review_comments"][-1].get("created_at", "")
                     from comment_parser import parse_datetime
-                    age = (datetime.now() - parse_datetime(last)).total_seconds()
+                    from datetime import timezone
+                    age = (datetime.now(timezone.utc) - parse_datetime(last)).total_seconds()
                     interval = adaptive_interval(args.interval, age)
             except Exception:
                 pass

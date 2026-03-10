@@ -12,97 +12,90 @@ if scripts_dir not in sys.path:
 
 import gitcode_api
 
-# CI task names in CANN pipeline
+# Actual CI task names in CANN pipeline (from cann-robot HTML table)
 CI_TASKS = {
-    "compile", "codecheck", "codecheck_inc",
-    "ut_test", "st_test", "build",
+    "codecheck", "sca", "anti_virus", "check_pr",
+    "compile_ascend_x86", "compile_ascend_arm",
+    "api_check", "pre_comment",
+    "ut_test", "st_test", "smoke_a900",
 }
 
-# Patterns to identify CI result comments from cann-robot
-CI_COMMENT_PATTERNS = [
-    re.compile(r"(compile|codecheck|codecheck_inc|ut_test|st_test|build)\s*[:\uff1a]\s*(pass|fail|success|failed|error)",
-               re.IGNORECASE),
-    re.compile(r"(pass|fail|success|failed|error)\s*[:\uff1a]?\s*(compile|codecheck|ut_test|st_test|build)",
-               re.IGNORECASE),
-]
+# Pattern to parse HTML table rows from cann-robot CI comments.
+# Real format:
+#   <td><strong>codecheck</strong></td>
+#   <td>✅ SUCCESS</td>
+#   <td><a href=URL>>>>>></a></td>
+#   <td><a href=URL>>>>>></a></td>
+CI_TABLE_ROW = re.compile(
+    r"<td><strong>(.+?)</strong></td>\s*"
+    r"<td>\s*(?:✅|❌|⚠️|🔴|🟢)?\s*(SUCCESS|FAILED|RUNNING|ERROR|TIMEOUT|ABORTED)\s*</td>"
+    r"(?:\s*<td><a\s+href=([^>]*)>.*?</a></td>)?",
+    re.IGNORECASE | re.DOTALL,
+)
 
-# Pattern to extract log URLs
-LOG_URL_PATTERN = re.compile(r"https?://[^\s\)]+(?:log|build|pipeline)[^\s\)]*", re.IGNORECASE)
+# Fallback: detect CI trigger comment (no results table yet)
+CI_TRIGGER_PATTERN = re.compile(r"流水线任务触发成功")
 
 
 def fetch_from_comments(repo: str, pr: int, task_filter: str = "all") -> dict:
-    """Extract CI results from PR comments."""
+    """Extract CI results from the latest cann-robot HTML table comment."""
     token = gitcode_api.get_token()
     comments = gitcode_api.get_pull_comments(repo, token, pr)
 
-    tasks = []
-    for comment in reversed(comments):  # newest first
+    # Walk newest-first to find the latest CI result table
+    for comment in reversed(comments):
         body = comment.get("body", "")
         author = comment.get("user", {})
         username = author.get("login", "") if isinstance(author, dict) else ""
 
-        # Only look at bot comments
-        if username not in ("cann-robot", "gitcode-bot", "ci-bot"):
+        if username != "cann-robot":
             continue
 
-        for pattern in CI_COMMENT_PATTERNS:
-            for match in pattern.finditer(body):
-                groups = match.groups()
-                # Determine which group is task name vs status
-                task_name = None
-                status = None
-                for g in groups:
-                    g_lower = g.lower()
-                    if g_lower in CI_TASKS:
-                        task_name = g_lower
-                    elif g_lower in ("pass", "success"):
-                        status = "pass"
-                    elif g_lower in ("fail", "failed", "error"):
-                        status = "fail"
+        # Only parse comments with an HTML table (CI result)
+        if "<table" not in body:
+            continue
 
-                if task_name and status:
-                    if task_filter != "all" and task_name != task_filter:
-                        continue
-                    # Extract log URL if present
-                    log_urls = LOG_URL_PATTERN.findall(body)
-                    log_snippet = _extract_snippet(body, task_name)
-                    tasks.append({
-                        "name": task_name,
-                        "status": status,
-                        "log_url": log_urls[0] if log_urls else "",
-                        "log_snippet": log_snippet,
-                        "comment_id": comment.get("id"),
-                    })
+        tasks = []
+        for match in CI_TABLE_ROW.finditer(body):
+            task_name = match.group(1).strip()
+            raw_status = match.group(2).strip().upper()
+            log_url = match.group(3).strip() if match.group(3) else ""
 
-    # Deduplicate: keep only the latest result per task
-    seen = set()
-    deduped = []
-    for t in tasks:
-        if t["name"] not in seen:
-            seen.add(t["name"])
-            deduped.append(t)
+            task_key = task_name.lower()
+
+            if raw_status == "SUCCESS":
+                status = "pass"
+            elif raw_status in ("FAILED", "ERROR", "TIMEOUT", "ABORTED"):
+                status = "fail"
+            elif raw_status == "RUNNING":
+                status = "running"
+            else:
+                status = raw_status.lower()
+
+            if task_filter != "all" and task_filter.lower() != task_key:
+                continue
+
+            tasks.append({
+                "name": task_name,
+                "status": status,
+                "log_url": log_url,
+                "comment_id": comment.get("id"),
+            })
+
+        if tasks:
+            return {
+                "source": "comments",
+                "repo": repo,
+                "pr": pr,
+                "tasks": tasks,
+            }
 
     return {
         "source": "comments",
         "repo": repo,
         "pr": pr,
-        "tasks": deduped,
+        "tasks": [],
     }
-
-
-def _extract_snippet(body: str, task_name: str) -> str:
-    """Try to extract a relevant error snippet from comment body."""
-    lines = body.split("\n")
-    relevant = []
-    capture = False
-    for line in lines:
-        if task_name in line.lower() or "error" in line.lower() or "fail" in line.lower():
-            capture = True
-        if capture:
-            relevant.append(line)
-            if len(relevant) >= 20:
-                break
-    return "\n".join(relevant) if relevant else ""
 
 
 def fetch_from_api(repo: str, pr: int, task_filter: str = "all") -> dict:

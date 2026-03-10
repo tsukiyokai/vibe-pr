@@ -83,7 +83,7 @@ def _infer_next_action(status: dict, review_sum: dict = None) -> str:
     if not status.get("cla"):
         return "sign CLA"
     ci = status.get("ci", "")
-    if ci == "fail":
+    if ci == "failed":
         return "fix CI"
     if ci in ("not_started", ""):
         return "trigger CI"

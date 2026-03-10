@@ -29,6 +29,8 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 from comment_parser import parse_pr_comments
 from gitcode_api import get_token, post_comment, GitCodeError
+import review_tracker
+import ci_log_fetcher
 
 STATE_DIR = SCRIPTS_DIR.parent / "state"
 
@@ -102,60 +104,75 @@ def commit_and_push(work_dir):
         return False
 
 
-# ── Claude 修复 ───────────────────────────────────────────
+# ── Agent Task Generation ────────────────────────────────
 
 
-def build_prompt(suggestions, repo, pr):
-    lines = [
-        f"你是 CANN 社区代码修复助手。仓库 {repo} 的 PR !{pr} 收到了以下 review 意见。",
-        "请搜索相关代码并逐条修复。",
-        "",
-    ]
-    for i, s in enumerate(suggestions, 1):
-        lines.append(f"## 意见 {i}（{s['author']}）")
-        lines.append("")
-        lines.append(s["body"])
-        lines.append("")
-    lines.extend([
-        "## 规则",
-        "1. 只改 reviewer 指出的问题，不做额外改动",
-        "2. 保持代码风格一致",
-        "3. 意见不明确或涉及设计决策时，跳过并说明原因",
-    ])
-    return "\n".join(lines)
+def generate_review_task(comments, repo, pr, work_dir):
+    """Generate a structured task for the review-responder agent."""
+    return {
+        "agent": "review-responder",
+        "repo": repo,
+        "pr": pr,
+        "repo_root": work_dir,
+        "comments": [
+            {
+                "id": c.get("id"),
+                "author": c.get("author"),
+                "type": c.get("type", "").replace("review_", ""),
+                "body": c.get("body"),
+                "file": c.get("file", ""),
+                "line": c.get("line"),
+            }
+            for c in comments
+        ],
+    }
 
 
-def run_claude_fix(prompt, work_dir):
-    log("调用 claude -p 修复...")
-    try:
-        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-        r = subprocess.run(
-            ["claude", "-p",
-             "--allowedTools", "Read,Edit,Glob,Grep,Bash(git diff:*),Bash(git status:*)"],
-            input=prompt,
-            cwd=work_dir,
-            capture_output=True, text=True,
-            timeout=600,
-            env=env,
-        )
-        if r.stdout:
-            log("claude 输出：")
-            out = r.stdout
-            if len(out) > 3000:
-                out = out[:3000] + "\n... (truncated)"
-            print(out, flush=True)
-        if r.returncode != 0:
-            log(f"claude -p 返回码 {r.returncode}")
-            if r.stderr:
-                log(f"stderr: {r.stderr[:500]}")
-            return False
-        return True
-    except subprocess.TimeoutExpired:
-        log("claude -p 超时（10分钟）")
-        return False
-    except FileNotFoundError:
-        log("错误：未找到 claude 命令，请确认已安装 Claude CLI")
-        return False
+def generate_ci_task(repo, pr, work_dir):
+    """Generate a structured task for the ci-analyzer agent."""
+    ci_results = ci_log_fetcher.fetch(repo, pr, source="auto")
+    return {
+        "agent": "ci-analyzer",
+        "repo": repo,
+        "pr": pr,
+        "repo_root": work_dir,
+        "failed_tasks": ci_results,
+    }
+
+
+# ── Safety ───────────────────────────────────────────────
+
+consecutive_failures = {}
+
+
+def record_failure(comment_id):
+    consecutive_failures[comment_id] = consecutive_failures.get(comment_id, 0) + 1
+
+
+def should_escalate(comment_id):
+    """Return True if this comment has failed fixes twice."""
+    return consecutive_failures.get(comment_id, 0) >= 2
+
+
+def count_changed_files(work_dir):
+    """Count files changed in working tree."""
+    r = subprocess.run(
+        ["git", "diff", "--name-only"],
+        cwd=work_dir, capture_output=True, text=True,
+    )
+    return len([l for l in r.stdout.strip().split("\n") if l])
+
+
+# ── Adaptive Interval ────────────────────────────────────
+
+
+def adaptive_interval(base_interval, last_activity_age_seconds):
+    """Adjust polling interval based on recent activity."""
+    if last_activity_age_seconds < 300:
+        return max(60, base_interval // 3)
+    elif last_activity_age_seconds > 3600:
+        return min(600, base_interval * 2)
+    return base_interval
 
 
 # ── CI 触发 ───────────────────────────────────────────────
@@ -173,9 +190,12 @@ def trigger_ci(repo, pr):
 
 
 def get_new_comments(repo, pr, state, human_only, extra_bots):
-    """拉取新评论，按类型分拣。返回 (suggestions, questions)。"""
+    """Pull new comments, classify, sync to tracker. Returns (suggestions, questions)."""
     data = parse_pr_comments(repo, pr, since_commit=True)
     processed = set(state["processed_ids"])
+
+    # Sync all comments to review tracker
+    review_tracker.sync(repo, pr)
 
     suggestions, questions = [], []
     for c in data["review_comments"]:
@@ -185,6 +205,12 @@ def get_new_comments(repo, pr, state, human_only, extra_bots):
         if human_only and extra_bots:
             if c["author"].lower() in {b.lower() for b in extra_bots}:
                 continue
+
+        # Skip comments that have already failed twice
+        if should_escalate(cid):
+            review_tracker.update_comment(repo, pr, cid, "needs_user",
+                                          "Auto-fix failed twice, escalated")
+            continue
 
         if c["type"] == "review_suggestion":
             suggestions.append(c)
@@ -221,6 +247,8 @@ def main():
                     help="仓库目录 (默认当前目录)")
     ap.add_argument("--once", action="store_true",
                     help="只执行一次，不循环")
+    ap.add_argument("--adaptive", action="store_true",
+                    help="Adapt polling interval based on activity")
     args = ap.parse_args()
 
     work_dir = os.path.abspath(args.work_dir)
@@ -277,30 +305,20 @@ def main():
 
         # 处理 review_suggestion
         if suggestions:
-            log(f"发现 {len(suggestions)} 条修改建议")
+            log(f"Found {len(suggestions)} suggestions")
             for s in suggestions:
                 preview = s["body"][:120].replace("\n", " ")
                 log(f"  - {s['author']}: {preview}")
 
-            prompt = build_prompt(suggestions, args.repo, args.pr)
-            ok = run_claude_fix(prompt, work_dir)
-
-            if ok and has_git_changes(work_dir):
-                if commit_and_push(work_dir):
-                    trigger_ci(args.repo, args.pr)
-                    state["fix_rounds"] += 1
-                    log(f"轮次 {state['fix_rounds']}/{args.max_rounds} 完成")
-                else:
-                    log("push 失败，跳过本轮")
-            elif ok:
-                log("无文件变更（意见可能已处理或无需修改）")
-            else:
-                log("claude 修复失败，跳过本轮")
+            task = generate_review_task(suggestions, args.repo, args.pr, work_dir)
+            print(json.dumps(task, ensure_ascii=False, indent=2), flush=True)
 
             mark_processed(state, suggestions)
+            state["fix_rounds"] += 1
+            log(f"Round {state['fix_rounds']}/{args.max_rounds} task generated")
         else:
             if not questions:
-                log("无新评论")
+                log("No new comments")
 
         # 持久化
         if suggestions or questions:
@@ -309,9 +327,21 @@ def main():
         if args.once:
             break
 
-        # 可中断的 sleep
-        log(f"等待 {args.interval}s...")
-        for _ in range(args.interval):
+        # Adaptive or fixed interval
+        interval = args.interval
+        if args.adaptive:
+            try:
+                data = parse_pr_comments(args.repo, args.pr, since_commit=False)
+                if data.get("review_comments"):
+                    last = data["review_comments"][-1].get("created_at", "")
+                    from comment_parser import parse_datetime
+                    age = (datetime.now() - parse_datetime(last)).total_seconds()
+                    interval = adaptive_interval(args.interval, age)
+            except Exception:
+                pass
+
+        log(f"Waiting {interval}s...")
+        for _ in range(interval):
             if not running[0]:
                 break
             time.sleep(1)

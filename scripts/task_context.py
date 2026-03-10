@@ -6,7 +6,7 @@
     --repo X --pr N：读取并打印已有 context 文件
     --list：列出所有活跃 PR 的 context 摘要
 
-context 文件存放在 ~/.claude/skills/canndev/context/ 下，
+context 文件存放在 ~/.claude/skills/vibe-pr/context/ 下，
 供 Claude 在新 session 中恢复工作上下文。
 """
 
@@ -17,7 +17,7 @@ import re
 import sys
 from datetime import datetime
 
-CONTEXT_DIR = os.path.expanduser("~/.claude/skills/canndev/context")
+CONTEXT_DIR = os.path.expanduser("~/.claude/skills/vibe-pr/context")
 
 # 确保 scripts 目录在 path 中，以便 import pr_status
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

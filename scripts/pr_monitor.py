@@ -180,7 +180,7 @@ def trigger_ci(repo, pr):
 
 
 def get_new_comments(repo, pr, state, human_only, extra_bots):
-    """Pull new comments, classify, sync to tracker. Returns (suggestions, questions)."""
+    """Pull new comments, classify, sync to tracker. Returns (suggestions, questions, data)."""
     # Fetch ALL comments (since_commit=False) so tracker gets the full picture
     data = parse_pr_comments(repo, pr, since_commit=False)
     processed = set(state["processed_ids"])
@@ -210,7 +210,7 @@ def get_new_comments(repo, pr, state, human_only, extra_bots):
         elif c["type"] == "review_question":
             questions.append(c)
 
-    return suggestions, questions
+    return suggestions, questions, data
 
 
 def mark_processed(state, comments):
@@ -279,7 +279,7 @@ def main():
 
         # 拉取评论
         try:
-            suggestions, questions = get_new_comments(
+            suggestions, questions, comment_data = get_new_comments(
                 args.repo, args.pr, state,
                 args.human_only, extra_bots,
             )
@@ -306,7 +306,10 @@ def main():
                 preview = s["body"][:120].replace("\n", " ")
                 log(f"  - {s['author']}: {preview}")
             if overflow:
-                log(f"  ({len(overflow)} more deferred to next round)")
+                if args.once:
+                    log(f"  ({len(overflow)} more not processed in --once mode)")
+                else:
+                    log(f"  ({len(overflow)} more deferred to next round)")
 
             task = generate_review_task(batch, args.repo, args.pr, work_dir)
             print(json.dumps(task, ensure_ascii=False, indent=2), flush=True)
@@ -325,15 +328,13 @@ def main():
         if args.once:
             break
 
-        # Adaptive or fixed interval
+        # Adaptive or fixed interval (reuse comment_data from get_new_comments)
         interval = args.interval
         if args.adaptive:
             try:
-                data = parse_pr_comments(args.repo, args.pr, since_commit=False)
-                if data.get("review_comments"):
-                    last = data["review_comments"][-1].get("created_at", "")
+                if comment_data.get("review_comments"):
+                    last = comment_data["review_comments"][-1].get("created_at", "")
                     from comment_parser import parse_datetime
-                    from datetime import timezone
                     age = (datetime.now(timezone.utc) - parse_datetime(last)).total_seconds()
                     interval = adaptive_interval(args.interval, age)
             except Exception:

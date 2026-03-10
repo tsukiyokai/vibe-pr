@@ -38,8 +38,10 @@ python3 scripts/ci_log_fetcher.py --repo {repo} --pr {pr} --source auto
 ### Step 2: Analyze Each Failed Task
 
 #### Compile Errors
-1. If `log_url` is available, fetch log content via `curl -sL {log_url}` in Bash.
-2. Extract file path, line number, and error message from the log output.
+1. Search PR comments for error details: run `python3 scripts/comment_parser.py --repo {repo} --pr {pr}`
+   and look for cann-robot comments containing compile error messages (file paths, line numbers, error text).
+   Note: `log_url` points to CodeArts Web UI (not downloadable), so extract info from PR comments instead.
+2. Extract file path, line number, and error message from the comment text.
 3. Read the source file.
 4. Understand the error (missing include, type mismatch, syntax error, etc.).
 5. Fix using Edit tool.
@@ -47,8 +49,8 @@ python3 scripts/ci_log_fetcher.py --repo {repo} --pr {pr} --source auto
 7. Mark as `auto_fixed`.
 
 #### Static Check (codecheck / codecheck_inc)
-1. If `log_url` is available, fetch log content via `curl -sL {log_url}` in Bash.
-2. Extract rule ID and file location from the log output.
+1. Search PR comments for static check details (same approach as compile errors).
+2. Extract rule ID and file location from the comment text.
 3. Load references/codecheck-rules.md for rule explanation.
 3. Apply the fix.
 4. Mark as `auto_fixed`.

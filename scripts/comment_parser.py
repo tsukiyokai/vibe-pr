@@ -73,10 +73,14 @@ def classify_comment(comment, pr_author):
         return "author_reply"
 
     # reviewer 的评论——区分建议和提问
-    # 先检查 question，避免含代码引用的提问被 suggestion 的 ``` 模式抢走
+    # 1) 明确的建议关键词优先（不含代码块判断）
+    if _has_suggestion_keywords(body):
+        return "review_suggestion"
+    # 2) 然后检查提问
     if _is_question(body):
         return "review_question"
-    if _is_suggestion(body):
+    # 3) 代码块作为 suggestion 的弱信号（fallback）
+    if "```" in body:
         return "review_suggestion"
 
     # 默认：reviewer 的一般评论，按 suggestion 处理（宁多勿漏）
@@ -95,10 +99,9 @@ def _is_ai_code_review(body):
     )
 
 
-def _is_suggestion(body):
-    """判断是否包含代码修改建议。"""
+def _has_suggestion_keywords(body):
+    """判断是否包含明确的建议关键词（不含代码块这种弱信号）。"""
     indicators = [
-        r"```",  # 代码块（通常包含修改建议）
         r"(?:建议|suggest|should|recommend|consider|最好|可以改|需要改|应该)",
         r"(?:改为|改成|换成|替换|replace|change.*to)",
         r"nit:",  # 常见 review 前缀
@@ -214,7 +217,7 @@ def parse_pr_comments(repo, pr_number, since_commit=False):
             "author": c.get("user", {}).get("login", ""),
             "body": c.get("body", ""),
             "file": c.get("path", ""),
-            "line": c.get("line"),
+            "line": c.get("position"),
             "created_at": c.get("created_at", ""),
             "after_latest_push": after_latest_push,
         })

@@ -17,7 +17,7 @@ import re
 import sys
 from datetime import datetime, timezone
 
-from gitcode_api import get_token, list_pulls, get_pull_comments, GitCodeError
+from gitcode_api import get_token, get_user, list_pulls, get_pull_comments, GitCodeError
 from pr_status import parse_bot_welcome
 
 
@@ -119,6 +119,15 @@ def analyze_activity(repo, token, candidates, recent_count=30):
     if failed_prs:
         print(f"失败的 PR：{', '.join(f'#{n}' for n in failed_prs)}", file=sys.stderr)
 
+    # 批量查询候选人邮箱
+    user_emails = {}
+    for c in candidates:
+        try:
+            user_info = get_user(c, token)
+            user_emails[c] = user_info.get("email") or ""
+        except GitCodeError:
+            user_emails[c] = ""
+
     # 计算响应率和平均响应时间
     result = []
     for name, s in stats.items():
@@ -127,6 +136,7 @@ def analyze_activity(repo, token, candidates, recent_count=30):
 
         entry = {
             "name": name,
+            "email": user_emails.get(name, ""),
             "reviews": s["reviews"],
             "lgtm_count": s["lgtm_count"],
             "approve_count": s["approve_count"],

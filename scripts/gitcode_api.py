@@ -218,6 +218,11 @@ def get_pull_diff(repo, token, number):
     return "\n".join(parts), files
 
 
+def get_user(username, token):
+    """获取用户公开信息（含邮箱，若用户已公开）。"""
+    return api_get(f"users/{username}", token)
+
+
 def create_fork(repo, token):
     """Fork 仓库到当前用户。"""
     owner, name = repo.split("/")

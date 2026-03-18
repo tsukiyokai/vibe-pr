@@ -209,7 +209,7 @@ if __name__ == "__main__":
 - [ ] **Step 5: Test review_tracker.py**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 
 # Verify it runs without errors
 python3 scripts/review_tracker.py --repo cann/hcomm --pr 584 --sync
@@ -398,7 +398,7 @@ if __name__ == "__main__":
 - [ ] **Step 3: Test ci_log_fetcher.py**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 
 python3 scripts/ci_log_fetcher.py --repo cann/hcomm --pr 584 --source comments
 # Expected: JSON with tasks array, each having name/status/log_url/log_snippet
@@ -632,7 +632,7 @@ if __name__ == "__main__":
 - [ ] **Step 5: Test pr_dashboard.py**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 
 # Test with specific PR
 python3 scripts/pr_dashboard.py --prs cann/hcomm:584
@@ -670,7 +670,7 @@ git commit -m "feat: add pr_dashboard.py for multi-PR status overview"
 - [ ] **Step 1: Create agents/ directory**
 
 ```bash
-mkdir -p /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr/agents
+mkdir -p /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr/agents
 ```
 
 - [ ] **Step 2: Create review-responder.md**
@@ -808,7 +808,7 @@ Example: "Done. Renamed `tmp_buf` to `recv_buffer` per naming convention."
 - [ ] **Step 4: Verify agent file is valid YAML frontmatter**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 # Check YAML frontmatter parses correctly
 python3 -c "
 import yaml
@@ -997,7 +997,7 @@ When a new rule ID appears in CI output that is not listed here, add it.
 - [ ] **Step 3: Verify agent file**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 python3 -c "
 import yaml
 with open('agents/ci-analyzer.md') as f:
@@ -1227,7 +1227,7 @@ In the sleep section at the end of the main loop (lines 312-317), replace with:
 - [ ] **Step 6: Test pr_monitor.py changes**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 
 # Test that old claude -p code path is removed
 grep -n "claude.*-p\|run_claude_fix\|build_prompt" scripts/pr_monitor.py
@@ -1771,7 +1771,7 @@ wc -l SKILL.md
 - [ ] **Step 3: Verify all references/ pointers resolve to existing files**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 for ref in references/phase-0-requirements.md references/phase-1-selfcheck.md \
            references/phase-4-ci.md references/phase-5-reviewer.md \
            references/workflow.md references/codecheck-rules.md \
@@ -1817,7 +1817,7 @@ git commit -m "refactor: slim SKILL.md from 529 to ~185 lines with progressive d
 - [ ] **Step 1: Verify all scripts run without import errors**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 
 for script in scripts/*.py; do
     echo "--- $script ---"
@@ -1872,7 +1872,7 @@ python3 scripts/ci_log_fetcher.py --repo cann/hcomm --pr 584 --source comments
 - [ ] **Step 5: Verify SKILL.md structure is loadable**
 
 ```bash
-cd /Users/shanshan/repo/me/ai4hccl/skills/vibe-pr
+cd /Users/shanshan/repo/_me/ai4hccl/skills/vibe-pr
 
 # Check YAML frontmatter parses
 python3 -c "
